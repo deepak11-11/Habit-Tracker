@@ -1,19 +1,23 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "predev": "node scripts/verify-project.js",
+    "dev": "node scripts/verify-project.js && vite",
+    "build": "node scripts/verify-project.js && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "audit": "node scripts/verify-project.js"
   },
   "dependencies": {
     "axios": "^1.18.1",
+    "lucide-react": "^1.27.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",
