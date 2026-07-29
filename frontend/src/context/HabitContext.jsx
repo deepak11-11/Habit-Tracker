@@ -1,13 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 const HabitContext = createContext();
 
-const API_BASE_URL = 'http://localhost:5001/api';
+const apiFetch = async (endpoint, options = {}) => {
+  try {
+    const res = await fetch(`/api${endpoint}`, options);
+    return res;
+  } catch (err1) {
+    try {
+      const res = await fetch(`http://localhost:5001/api${endpoint}`, options);
+      return res;
+    } catch (err2) {
+      throw err2;
+    }
+  }
+};
 
 const todayStr = new Date().toISOString().slice(0, 10);
-const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-const dayMinus2Str = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
-const dayMinus3Str = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
 
 const normalizeHabit = (h) => {
   if (!h || typeof h !== 'object') {
@@ -35,125 +45,145 @@ const normalizeHabit = (h) => {
   };
 };
 
-const INITIAL_HABITS = [
-  {
-    id: 'h_1',
-    title: 'Morning Meditation & Breathing',
-    description: '15 minutes of mindfulness to start the day with focus.',
-    category: 'Health',
-    color: '#8b5cf6',
-    priority: 'High',
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
-    completions: [todayStr, yesterdayStr, dayMinus2Str, dayMinus3Str]
-  },
-  {
-    id: 'h_2',
-    title: 'Read 20 Pages of Non-Fiction',
-    description: 'Continuous learning and skill enhancement.',
-    category: 'Productivity',
-    color: '#3b82f6',
-    priority: 'Medium',
-    createdAt: new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10),
-    completions: [todayStr, yesterdayStr]
-  },
-  {
-    id: 'h_3',
-    title: '30 Min Workout / Cardio',
-    description: 'High intensity interval training or weight training.',
-    category: 'Fitness',
-    color: '#10b981',
-    priority: 'High',
-    createdAt: new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10),
-    completions: [todayStr]
-  }
-];
-
-const INITIAL_HISTORY = [
-  { id: 'ch_1', habitId: 'h_1', title: 'Morning Meditation & Breathing', category: 'Health', color: '#8b5cf6', completedAt: todayStr },
-  { id: 'ch_2', habitId: 'h_1', title: 'Morning Meditation & Breathing', category: 'Health', color: '#8b5cf6', completedAt: yesterdayStr },
-  { id: 'ch_3', habitId: 'h_1', title: 'Morning Meditation & Breathing', category: 'Health', color: '#8b5cf6', completedAt: dayMinus2Str },
-  { id: 'ch_4', habitId: 'h_1', title: 'Morning Meditation & Breathing', category: 'Health', color: '#8b5cf6', completedAt: dayMinus3Str },
-  { id: 'ch_5', habitId: 'h_2', title: 'Read 20 Pages of Non-Fiction', category: 'Productivity', color: '#3b82f6', completedAt: todayStr },
-  { id: 'ch_6', habitId: 'h_2', title: 'Read 20 Pages of Non-Fiction', category: 'Productivity', color: '#3b82f6', completedAt: yesterdayStr },
-  { id: 'ch_7', habitId: 'h_3', title: '30 Min Workout / Cardio', category: 'Fitness', color: '#10b981', completedAt: todayStr },
-  { id: 'ch_old_1', habitId: 'h_old_1', title: 'Deep Sleep 8 Hours', category: 'Health', color: '#06b6d4', completedAt: yesterdayStr },
-  { id: 'ch_old_2', habitId: 'h_old_2', title: 'Cold Shower', category: 'Health', color: '#ec4899', completedAt: dayMinus2Str }
-];
-
 export const HabitProvider = ({ children }) => {
-  const [habits, setHabits] = useState(() => {
-    try {
-      const saved = localStorage.getItem('ht_habits');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(normalizeHabit);
-      }
-    } catch (err) {
-      localStorage.removeItem('ht_habits');
-    }
-    return INITIAL_HABITS.map(normalizeHabit);
-  });
-
-  const [completedHistory, setCompletedHistory] = useState(() => {
-    try {
-      const savedHistory = localStorage.getItem('ht_completed_history');
-      if (savedHistory) {
-        const parsed = JSON.parse(savedHistory);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (err) {
-      localStorage.removeItem('ht_completed_history');
-    }
-    return INITIAL_HISTORY;
-  });
-
+  const { user, token, logout } = useAuth();
+  const [habits, setHabits] = useState([]);
+  const [completedHistory, setCompletedHistory] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Sync to Backend Database API
-  const syncWithBackendApi = async (habitsData) => {
-    try {
-      await fetch(`${API_BASE_URL}/habits`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(habitsData)
-      });
-    } catch (err) {
-      // Backend offline fallback handled silently
-    }
-  };
-
-  // Fetch initial habits from backend database on load
+  // Fetch initial habits from backend database on user login or switch
   useEffect(() => {
-    const fetchBackendHabits = async () => {
+    if (!user || !user.id) {
+      setHabits([]);
+      setCompletedHistory([]);
+      setIsInitialized(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadUserHabits = async () => {
+      setIsInitialized(false);
+      const storageKeyHabits = `ht_habits_${user.id}`;
+      const storageKeyHistory = `ht_completed_history_${user.id}`;
+
       try {
-        const res = await fetch(`${API_BASE_URL}/habits`);
+        const res = await apiFetch('/habits', {
+          headers: {
+            'Authorization': `Bearer ${token || ''}`,
+            'x-user-id': user.id
+          }
+        });
+
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+
         if (res.ok) {
           const dbHabits = await res.json();
-          if (Array.isArray(dbHabits) && dbHabits.length > 0) {
+          if (Array.isArray(dbHabits)) {
             const normalized = dbHabits.map(normalizeHabit);
-            setHabits(normalized);
+            if (isMounted) {
+              setHabits(normalized);
+
+              // Reconstruct completedHistory from completions array of habits
+              const historyMap = [];
+              normalized.forEach(h => {
+                if (Array.isArray(h.completions)) {
+                  h.completions.forEach((dateStr, idx) => {
+                    historyMap.push({
+                      id: `ch_${h.id}_${idx}_${dateStr}`,
+                      habitId: h.id,
+                      title: h.title,
+                      category: h.category,
+                      color: h.color,
+                      completedAt: dateStr
+                    });
+                  });
+                }
+              });
+
+              setCompletedHistory(historyMap);
+              try {
+                localStorage.setItem(storageKeyHabits, JSON.stringify(normalized));
+                localStorage.setItem(storageKeyHistory, JSON.stringify(historyMap));
+              } catch (e) {}
+
+              setIsInitialized(true);
+              return;
+            }
           }
         }
       } catch (err) {
-        // Backend offline fallback
+        // Backend offline fallback to local cache
+      }
+
+      // Local storage fallback if backend unreachable
+      try {
+        const savedHabits = localStorage.getItem(storageKeyHabits) || sessionStorage.getItem(storageKeyHabits);
+        if (savedHabits && isMounted) {
+          const parsed = JSON.parse(savedHabits);
+          setHabits(Array.isArray(parsed) ? parsed.map(normalizeHabit) : []);
+        }
+
+        const savedHistory = localStorage.getItem(storageKeyHistory) || sessionStorage.getItem(storageKeyHistory);
+        if (savedHistory && isMounted) {
+          const parsed = JSON.parse(savedHistory);
+          setCompletedHistory(Array.isArray(parsed) ? parsed : []);
+        }
+      } catch (e) {}
+
+      if (isMounted) {
+        setIsInitialized(true);
       }
     };
-    fetchBackendHabits();
-  }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('ht_habits', JSON.stringify(habits));
-    } catch (err) {}
-    syncWithBackendApi(habits);
-  }, [habits]);
+    loadUserHabits();
 
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, token]);
+
+  // Sync to Backend Database ONLY AFTER initial load completes
   useEffect(() => {
+    if (!isInitialized || !user || !user.id) return;
+
+    const storageKeyHabits = `ht_habits_${user.id}`;
+    const storageKeyHistory = `ht_completed_history_${user.id}`;
+
     try {
-      localStorage.setItem('ht_completed_history', JSON.stringify(completedHistory));
+      if (localStorage.getItem('ht_user')) {
+        localStorage.setItem(storageKeyHabits, JSON.stringify(habits));
+        localStorage.setItem(storageKeyHistory, JSON.stringify(completedHistory));
+      } else {
+        sessionStorage.setItem(storageKeyHabits, JSON.stringify(habits));
+        sessionStorage.setItem(storageKeyHistory, JSON.stringify(completedHistory));
+      }
     } catch (err) {}
-  }, [completedHistory]);
+
+    const syncApi = async () => {
+      try {
+        const res = await apiFetch('/habits', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+            'x-user-id': user.id
+          },
+          body: JSON.stringify(habits)
+        });
+        if (res.status === 401) {
+          logout();
+        }
+      } catch (err) {}
+    };
+
+    syncApi();
+  }, [habits, completedHistory, isInitialized, user?.id]);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();

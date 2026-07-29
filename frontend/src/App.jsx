@@ -101,10 +101,26 @@ const NotificationToasts = () => {
 
 // Protected Layout Component
 const ProtectedLayout = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  if (!isAuthenticated) {
+  if (isLoading) {
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#090a0f',
+        color: '#8b5cf6',
+        fontWeight: 600
+      }}>
+        Loading Session...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -125,6 +141,17 @@ const ProtectedLayout = () => {
   );
 };
 
+// Public Only Route Guard Component (Allows explicit navigation to login if desired)
+const PublicRoute = ({ children }) => {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
+  return children;
+};
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -133,11 +160,12 @@ export default function App() {
           <Router>
             <Routes>
               {/* Public Auth Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
+              <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+              <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
 
               {/* Protected SaaS App Routes */}
               <Route element={<ProtectedLayout />}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/habits" element={<Habits />} />
                 <Route path="/calendar" element={<CalendarPage />} />

@@ -105,8 +105,8 @@ export const DashboardPage = () => {
       {filteredHabits.length === 0 ? (
         <div className="glass-panel empty-state">
           <CheckSquare size={48} color="var(--text-muted)" />
-          <h3>No habits found</h3>
-          <p>Get started by creating your first daily habit goal.</p>
+          <h3>You don't have any habits yet</h3>
+          <p>You don't have any habits yet. Create your first habit to get started.</p>
           <button className="btn btn-primary" onClick={handleOpenAdd}>
             <Plus size={18} />
             <span>Create First Habit</span>

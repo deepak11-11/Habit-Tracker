@@ -7,14 +7,18 @@ export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = login(email, password, rememberMe);
+    setErrorMsg('');
+    const res = await login(email, password, rememberMe);
     if (res.success) {
       navigate('/dashboard');
+    } else {
+      setErrorMsg(res.message || 'Invalid email or password');
     }
   };
 
@@ -28,6 +32,12 @@ export const Login = () => {
           <h2 className="gradient-text">Welcome Back</h2>
           <p className="auth-subtitle">Sign in to track your habits and maintain streaks</p>
         </div>
+
+        {errorMsg && (
+          <div style={{ color: '#ef4444', fontSize: '0.85rem', textAlign: 'center', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '0.6rem 0.8rem', borderRadius: '8px' }}>
+            {errorMsg}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">

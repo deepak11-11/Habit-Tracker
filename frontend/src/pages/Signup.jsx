@@ -13,14 +13,15 @@ export const Signup = () => {
   const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg('');
     if (password !== confirmPassword) {
       setErrorMsg('Passwords do not match.');
       return;
     }
 
-    const res = signup(name, email, password);
+    const res = await signup(name, email, password);
     if (res.success) {
       navigate('/dashboard');
     } else {
